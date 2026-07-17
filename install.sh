@@ -125,38 +125,40 @@ fi
 step "VendastaTalk.app"
 RELEASES_REPO="Fan1000-prog/vendasta-talk-releases"
 
-find_dmg() {
-  # Newest VendastaTalk DMG from ~/Downloads or next to this script
-  local script_dir
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  # `|| true`: no matches must not kill the script under set -e -o pipefail
-  ls -t "$HOME/Downloads"/VendastaTalk*.dmg "$script_dir"/VendastaTalk*.dmg 2>/dev/null | head -1 || true
+# `|| true` everywhere: a failed probe must not kill the script under
+# set -e -o pipefail — we fall back to reinstalling instead.
+installed_version() {
+  /usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' \
+    /Applications/VendastaTalk.app/Contents/Info.plist 2>/dev/null || true
 }
 
+LATEST_JSON="$(curl -sf "https://api.github.com/repos/$RELEASES_REPO/releases/latest" || true)"
+LATEST_VERSION="$(echo "$LATEST_JSON" | grep -o '"tag_name": *"v[^"]*"' | head -1 | cut -d'"' -f4 | sed 's/^v//' || true)"
+LATEST_URL="$(echo "$LATEST_JSON" | grep -o '"browser_download_url": *"[^"]*\.dmg"' | head -1 | cut -d'"' -f4 || true)"
+
 download_latest_dmg() {
-  # Grab the newest DMG from the public releases repo. After this first
-  # install the app updates itself, so this only runs once per machine.
-  echo "    Downloading the latest release from GitHub..." >&2
-  local url
-  url="$(curl -sf "https://api.github.com/repos/$RELEASES_REPO/releases/latest" \
-    | grep -o '"browser_download_url": *"[^"]*\.dmg"' | head -1 | cut -d'"' -f4 || true)"
-  [ -n "$url" ] || return 1
-  local dest="$HOME/Downloads/$(basename "$url")"
-  curl -L --progress-bar -o "$dest" "$url" || return 1
+  echo "    Downloading v$LATEST_VERSION from GitHub..." >&2
+  [ -n "$LATEST_URL" ] || return 1
+  local dest="$HOME/Downloads/$(basename "$LATEST_URL")"
+  curl -L --progress-bar -o "$dest" "$LATEST_URL" || return 1
   echo "$dest"
 }
 
-if [ -d "/Applications/VendastaTalk.app" ] && [ -z "${1:-}" ]; then
+INSTALLED="$(installed_version)"
+if [ -n "${1:-}" ]; then
+  # Explicit DMG path always wins — reinstall from it.
+  DMG="$1"
+elif [ -n "$INSTALLED" ] && [ "$INSTALLED" = "$LATEST_VERSION" ]; then
   DMG=""
-  ok "already in /Applications (the app updates itself from Settings)"
+  ok "already on the latest version ($INSTALLED) — future updates are one click in the app (Settings → Updates)"
 else
-  DMG="${1:-$(find_dmg)}"
-  if [ -z "$DMG" ]; then
-    DMG="$(download_latest_dmg)" \
-      || fail "Could not download the latest release from github.com/$RELEASES_REPO. Check your connection, or download the DMG manually and re-run this script."
-  fi
-  [ -f "$DMG" ] || fail "DMG not found: $DMG"
+  # Missing, older (pre-updater versions can't update themselves), or we
+  # couldn't reach GitHub to compare — install the latest to be safe.
+  [ -n "$INSTALLED" ] && echo "    Upgrading v$INSTALLED → v${LATEST_VERSION:-latest} (settings and snippets are kept)"
+  DMG="$(download_latest_dmg)" \
+    || fail "Could not download the latest release from github.com/$RELEASES_REPO. Check your connection, or download the DMG manually and re-run this script with its path as an argument."
 fi
+[ -z "$DMG" ] || [ -f "$DMG" ] || fail "DMG not found: $DMG"
 if [ -n "$DMG" ]; then
   echo "    Installing from: $DMG"
   MOUNT_POINT="$(mktemp -d /tmp/vendastatalk-dmg.XXXXXX)"
