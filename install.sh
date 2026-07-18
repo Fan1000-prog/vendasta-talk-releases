@@ -2,7 +2,7 @@
 # VendastaTalk installer — sets up everything needed to run the app.
 #
 # Usage:
-#   bash install.sh [--with-ai] [path/to/VendastaTalk_x.y.z_arch.dmg]
+#   bash install.sh [--no-ai] [path/to/VendastaTalk_x.y.z_arch.dmg]
 #
 # If no DMG path is given, the script looks for one in ~/Downloads and
 # next to the script itself. Safe to re-run: every step is skipped if
@@ -11,14 +11,12 @@
 # What it does:
 #   1. Installs Homebrew (if missing)
 #   2. Installs whisper-cpp via Homebrew
-#   3. Downloads the Whisper speech model (~142 MB)
-#   4. Installs VendastaTalk.app from the DMG and removes the quarantine
+#   3. Installs Ollama and pulls the AI model (~2 GB) — powers Transforms
+#      and AI cleanup. Skip with --no-ai (Transforms won't work without it;
+#      re-run this script later to add it).
+#   4. Downloads the Whisper speech model (~142 MB)
+#   5. Installs VendastaTalk.app from the DMG and removes the quarantine
 #      flag (the app is ad-hoc signed, not notarized)
-#
-# With --with-ai it also installs Ollama and pulls the AI cleanup model
-# (~2 GB). Only needed if you switch Cleanup to "AI" in Settings — the
-# default Fast cleanup works without it, and you can re-run this script
-# with --with-ai later at any time.
 
 set -euo pipefail
 
@@ -34,11 +32,13 @@ fail()  { printf '\033[1;31m    ✗ %s\033[0m\n' "$1" >&2; exit 1; }
 
 [ "$(uname -s)" = "Darwin" ] || fail "VendastaTalk is macOS-only."
 
-WITH_AI=0
-if [ "${1:-}" = "--with-ai" ]; then
-  WITH_AI=1
-  shift
-fi
+# AI (Ollama) installs by default — Transforms and AI cleanup need it.
+# --no-ai skips it; --with-ai still accepted for old instructions/docs.
+WITH_AI=1
+case "${1:-}" in
+  --no-ai)   WITH_AI=0; shift ;;
+  --with-ai) shift ;;
+esac
 
 # ---------------------------------------------------------------- Homebrew
 step "Homebrew"
@@ -105,8 +105,8 @@ if [ "$WITH_AI" = "1" ]; then
     ok "downloaded"
   fi
 else
-  step "Ollama (optional AI cleanup)"
-  ok "skipped — the default Fast cleanup needs no AI model. Re-run with --with-ai to add it."
+  step "Ollama (AI for Transforms + cleanup)"
+  ok "skipped (--no-ai) — Transforms won't work without it. Re-run this script without --no-ai to add it."
 fi
 
 # ----------------------------------------------------------- Whisper model
