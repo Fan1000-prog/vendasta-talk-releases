@@ -23,7 +23,7 @@ set -euo pipefail
 APP_SUPPORT="$HOME/Library/Application Support/com.vendasta.vendastatalk"
 WHISPER_MODEL_PATH="$APP_SUPPORT/models/ggml-base.en.bin"
 WHISPER_MODEL_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.en.bin"
-OLLAMA_MODEL="llama3.2:3b"
+OLLAMA_MODEL="qwen2.5:3b"
 OLLAMA_URL="http://localhost:11434"
 
 step()  { printf '\n\033[1;34m==> %s\033[0m\n' "$1"; }
@@ -103,6 +103,9 @@ if [ "$WITH_AI" = "1" ]; then
   else
     ollama pull "$OLLAMA_MODEL"
     ok "downloaded"
+  fi
+  if curl -sf "$OLLAMA_URL/api/tags" | grep -q "\"llama3.2:3b\""; then
+    echo "    (older llama3.2:3b model still on disk — 'ollama rm llama3.2:3b' frees ~2GB if you don't need it)"
   fi
 else
   step "Ollama (AI for Transforms + cleanup)"
